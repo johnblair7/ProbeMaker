@@ -264,11 +264,19 @@ class ProbeMaker:
             
             probe_pairs = []
             
-            # Try different starting positions to find multiple valid probes
+            # Try to find non-overlapping probes
+            used_positions = set()  # Track used starting positions to avoid overlap
+            min_spacing = 50  # Minimum spacing between probe starts to ensure no overlap
+            
             for pair_num in range(num_pairs):
                 try:
-                    # Find valid 50-base probe that meets all constraints
-                    probe_50, probe_start_pos = self.find_valid_probe_start(reverse_complement, mrna, start_offset=pair_num * 10)
+                    # Find valid 50-base probe that doesn't overlap with previous ones
+                    probe_50, probe_start_pos = self.find_non_overlapping_probe_start(
+                        reverse_complement, mrna, used_positions, min_spacing
+                    )
+                    
+                    # Mark this position as used
+                    used_positions.add(probe_start_pos)
                     
                     # Split the 50-base probe into two 25-base probes
                     lhs_probe = probe_50[:25]
@@ -294,8 +302,37 @@ class ProbeMaker:
                     probe_pairs.append(probe_pair)
                     
                 except ValueError as e:
-                    # If we can't find a valid probe at this position, try the next
-                    continue
+                    # If we can't find a non-overlapping probe, try with reduced spacing
+                    min_spacing = max(25, min_spacing - 10)  # Reduce spacing requirement
+                    try:
+                        probe_50, probe_start_pos = self.find_non_overlapping_probe_start(
+                            reverse_complement, mrna, used_positions, min_spacing
+                        )
+                        used_positions.add(probe_start_pos)
+                        
+                        lhs_probe = probe_50[:25]
+                        rhs_probe = probe_50[25:]
+                        gc_count = probe_50.count('G') + probe_50.count('C')
+                        gc_percentage = (gc_count / len(probe_50)) * 100
+                        
+                        probe_pair = {
+                            'pair_number': pair_num + 1,
+                            'input_sequence': input_sequence,
+                            'mrna_sequence': mrna,
+                            'reverse_complementary_sequence': reverse_complement,
+                            'probe_50_base': probe_50,
+                            'lhs_probe': lhs_probe,
+                            'rhs_probe': rhs_probe,
+                            'probe_start_position': probe_start_pos,
+                            'gc_content_percentage': gc_percentage,
+                            'input_type': 'DNA' if is_dna else 'RNA'
+                        }
+                        
+                        probe_pairs.append(probe_pair)
+                        
+                    except ValueError:
+                        # If still can't find one, skip this pair
+                        continue
             
             if not probe_pairs:
                 raise ValueError("Could not generate any valid probe pairs")
@@ -351,6 +388,33 @@ class ProbeMaker:
         
         # If no valid probe found, raise an error
         raise ValueError("No valid 50-base probe found that meets all constraints")
+    
+    def find_non_overlapping_probe_start(self, reverse_complement: str, original_mrna: str, used_positions: set, min_spacing: int) -> tuple[str, int]:
+        """Find a valid starting position for a 50-base probe that doesn't overlap with previous probes."""
+        if len(reverse_complement) < 50:
+            raise ValueError(f"Reverse complement too short ({len(reverse_complement)} bases) to create 50-base probe")
+        
+        # Try different starting positions to find a valid, non-overlapping probe
+        for start_pos in range(0, len(reverse_complement) - 49):
+            # Check if this position is too close to any previously used position
+            too_close = False
+            for used_pos in used_positions:
+                if abs(start_pos - used_pos) < min_spacing:
+                    too_close = True
+                    break
+            
+            if too_close:
+                continue
+                
+            probe_candidate = reverse_complement[start_pos:start_pos + 50]
+            probe_dna = probe_candidate.replace('U', 'T').replace('u', 't')
+            
+            is_valid, message = self.validate_probe_constraints(probe_dna, original_mrna)
+            if is_valid:
+                return probe_dna, start_pos
+        
+        # If no non-overlapping probe found, raise an error
+        raise ValueError(f"No valid non-overlapping 50-base probe found with minimum spacing {min_spacing}")
     
     def generate_mrna_complement(self, input_sequence: str, is_dna: bool = True) -> Dict[str, str]:
         """Generate complementary sequence to mRNA from DNA or RNA input."""
