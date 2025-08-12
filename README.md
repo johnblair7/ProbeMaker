@@ -31,6 +31,43 @@ A Python tool to generate complementary sequences to mRNA for given genes. This 
    pip install -r requirements.txt
    ```
 
+## Web Application
+
+ProbeMaker now includes a web interface for easy use in browsers!
+
+### Quick Start (Web App)
+
+1. **Start the web server:**
+```bash
+python app.py
+```
+
+2. **Open your browser to:** `http://localhost:5000`
+
+3. **Enter gene names** in the text area (one per line)
+
+4. **Click "Generate Probe Sequences"** and wait for processing
+
+5. **Download the results** as a .txt file
+
+### Features of the Web App
+
+- 🎨 **Modern, responsive interface** that works on all devices
+- 📝 **Simple text input** - just paste your gene names
+- ⚡ **Real-time progress** with visual feedback
+- 📥 **Automatic file download** in the correct format
+- 🔒 **Secure file handling** with automatic cleanup
+- 📱 **Mobile-friendly** design
+
+### Deployment Options
+
+For hosting on your website, see [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions including:
+- Production deployment with Gunicorn
+- Docker containerization
+- Cloud hosting (Heroku, AWS, etc.)
+- Shared hosting setup
+- Nginx reverse proxy configuration
+
 ## Usage
 
 ### Command Line Interface

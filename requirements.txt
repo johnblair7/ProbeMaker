@@ -1,4 +1,5 @@
 # External dependencies
 requests>=2.25.0
+Flask>=2.0.0
 
 # Python 3.6+ required for type hints and f-strings
