@@ -42,7 +42,7 @@ ProbeMaker now includes a web interface for easy use in browsers!
 python app.py
 ```
 
-2. **Open your browser to:** `http://localhost:5000`
+2. **Open your browser to:** `http://localhost:8080`
 
 3. **Enter gene names** in the text area (one per line)
 

@@ -9,7 +9,7 @@ import time
 
 def test_web_app():
     """Test the web app endpoints."""
-    base_url = "http://localhost:5000"
+    base_url = "http://localhost:8080"
     
     print("🧪 Testing ProbeMaker Web App...")
     
