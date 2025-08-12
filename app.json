@@ -1,0 +1,18 @@
+{
+  "name": "probe-maker",
+  "description": "Generate complementary sequences to mRNA for given genes",
+  "repository": "https://github.com/yourusername/probe-maker",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["python", "flask", "bioinformatics", "molecular-biology"],
+  "env": {
+    "SECRET_KEY": {
+      "description": "A secret key for the Flask application",
+      "generator": "secret"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
