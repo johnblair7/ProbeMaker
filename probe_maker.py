@@ -29,9 +29,9 @@ class GeneSequenceFetcher:
             search_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
             search_params = {
                 'db': 'nucleotide',
-                'term': f"{gene_name}[Gene Name] AND mRNA[Filter]",
+                'term': f"{gene_name}[Gene Name] AND (transcript[Title] OR mRNA[Title] OR RNA[Title])",
                 'retmode': 'json',
-                'retmax': 1
+                'retmax': 10
             }
             
             response = self.session.get(search_url, params=search_params)
@@ -46,30 +46,75 @@ class GeneSequenceFetcher:
             if not gene_ids:
                 return None
             
-            # Fetch the sequence for the first result
-            gene_id = gene_ids[0]
-            fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-            fetch_params = {
+            # Try multiple results to find a good sequence
+            for gene_id in gene_ids[:5]:  # Try up to 5 results
+                try:
+                    fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    fetch_params = {
+                        'db': 'nucleotide',
+                        'id': gene_id,
+                        'rettype': 'fasta',
+                        'retmode': 'text'
+                    }
+                    
+                    response = self.session.get(fetch_url, params=fetch_params)
+                    response.raise_for_status()
+                    
+                    # Parse FASTA format and extract sequence
+                    lines = response.text.strip().split('\n')
+                    sequence = ''.join(lines[1:])  # Skip header line
+                    
+                    # Clean the sequence (remove any non-nucleotide characters)
+                    sequence = re.sub(r'[^ATGCUatgcu]', '', sequence)
+                    
+                    # Check if this sequence is long enough and looks like a good candidate
+                    if len(sequence) >= 50 and self._is_good_sequence_candidate(sequence):
+                        return sequence
+                        
+                except Exception as e:
+                    # If this result fails, try the next one
+                    continue
+            
+            # If no good sequence found, try a broader search without transcript filter
+            print(f"  Trying broader search for {gene_name}...")
+            fallback_search_params = {
                 'db': 'nucleotide',
-                'id': gene_id,
-                'rettype': 'fasta',
-                'retmode': 'text'
+                'term': f"{gene_name}[Gene Name]",
+                'retmode': 'json',
+                'retmax': 5
             }
             
-            response = self.session.get(fetch_url, params=fetch_params)
+            response = self.session.get(search_url, params=fallback_search_params)
             response.raise_for_status()
             
-            # Parse FASTA format and extract sequence
-            lines = response.text.strip().split('\n')
-            sequence = ''.join(lines[1:])  # Skip header line
+            fallback_data = response.json()
+            if 'esearchresult' in fallback_data and 'idlist' in fallback_data['esearchresult']:
+                fallback_ids = fallback_data['esearchresult']['idlist']
+                
+                for gene_id in fallback_ids[:3]:
+                    try:
+                        fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                        fetch_params = {
+                            'db': 'nucleotide',
+                            'id': gene_id,
+                            'rettype': 'fasta',
+                            'retmode': 'text'
+                        }
+                        
+                        response = self.session.get(fetch_url, params=fetch_params)
+                        response.raise_for_status()
+                        
+                        lines = response.text.strip().split('\n')
+                        sequence = ''.join(lines[1:])
+                        sequence = re.sub(r'[^ATGCUatgcu]', '', sequence)
+                        
+                        if len(sequence) >= 50 and self._is_good_sequence_candidate(sequence):
+                            return sequence
+                            
+                    except Exception as e:
+                        continue
             
-            # Clean the sequence (remove any non-nucleotide characters)
-            sequence = re.sub(r'[^ATGCUatgcu]', '', sequence)
-            
-            if len(sequence) < 50:
-                return None
-            
-            return sequence
+            return None
             
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
@@ -82,6 +127,31 @@ class GeneSequenceFetcher:
         except Exception as e:
             print(f"Error fetching sequence for {gene_name}: {e}")
             return None
+    
+    def _is_good_sequence_candidate(self, sequence: str) -> bool:
+        """Check if a sequence is a good candidate for probe design."""
+        # Must be at least 50 bases long
+        if len(sequence) < 50:
+            return False
+        
+        # Reject extremely long sequences (likely genomic DNA)
+        if len(sequence) > 100000:  # 100kb max
+            return False
+        
+        # Should have a reasonable GC content (not too extreme)
+        gc_count = sequence.upper().count('G') + sequence.upper().count('C')
+        gc_percentage = (gc_count / len(sequence)) * 100
+        
+        # Accept sequences with GC content between 20% and 80%
+        if gc_percentage < 20 or gc_percentage > 80:
+            return False
+        
+        # Should not be mostly N's or other ambiguous characters
+        ambiguous_count = sequence.upper().count('N') + sequence.upper().count('X')
+        if ambiguous_count > len(sequence) * 0.1:  # More than 10% ambiguous
+            return False
+        
+        return True
     
     def close(self):
         """Close the session."""
