@@ -340,37 +340,51 @@ gene_names=BRCA1%0ATP53%0AEGFR
             }, 500);
             
             try {
-                // For standalone version, show demo message
+                const formData = new FormData(form);
+                const response = await fetch('https://YOUR-RENDER-URL.onrender.com/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
                 clearInterval(progressInterval);
                 progressBar.style.width = '100%';
                 
-                setTimeout(() => {
-                    status.className = 'status info';
+                if (result.success) {
+                    // Success
+                    status.className = 'status success';
                     status.innerHTML = `
-                        <strong>ℹ️ Demo Mode</strong><br>
-                        This is a standalone demo version. For full functionality, you need to:<br>
-                        <br>
-                        1. <strong>Deploy the Flask backend</strong> (see DEPLOYMENT.md)<br>
-                        2. <strong>Update the API endpoint</strong> in this HTML file<br>
-                        3. <strong>Or use the command-line version</strong> directly
+                        <strong>✅ Success!</strong><br>
+                        ${result.message}<br>
+                        <small>Generated ${result.probe_count} probe pairs for ${result.gene_count} genes</small>
                     `;
                     status.style.display = 'block';
                     
-                    generateBtn.disabled = false;
-                    generateBtn.textContent = '🚀 Generate Probe Sequences';
-                    progress.style.display = 'none';
-                    progressBar.style.width = '0%';
-                }, 1000);
+                    // Show download section
+                    const downloadBtn = document.getElementById('downloadBtn');
+                    downloadBtn.href = `https://YOUR-RENDER-URL.onrender.com/download/${result.file_path.split('/').pop()}`;
+                    downloadSection.style.display = 'block';
+                    
+                } else {
+                    // Error
+                    status.className = 'status error';
+                    status.innerHTML = `<strong>❌ Error:</strong> ${result.error}`;
+                    status.style.display = 'block';
+                }
                 
             } catch (error) {
                 clearInterval(progressInterval);
                 status.className = 'status error';
                 status.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
                 status.style.display = 'block';
+            } finally {
                 generateBtn.disabled = false;
                 generateBtn.textContent = '🚀 Generate Probe Sequences';
-                progress.style.display = 'none';
-                progressBar.style.width = '0%';
+                setTimeout(() => {
+                    progress.style.display = 'none';
+                    progressBar.style.width = '0%';
+                }, 1000);
             }
         });
 
