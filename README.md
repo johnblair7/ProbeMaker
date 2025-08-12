@@ -59,10 +59,10 @@ python probe_maker.py -f genes.txt --rna
 #### Gene Name Mode (NCBI Integration)
 ```bash
 # Process gene names and fetch sequences from NCBI
-python probe_maker.py -g gene_names.txt
+python probe_maker.py -g top20_genes.txt
 
 # Save gene name results to file
-python probe_maker.py -g gene_names.txt -o results.txt
+python probe_maker.py -g top20_genes.txt -o results.txt
 ```
 
 #### Interactive Mode
@@ -208,16 +208,33 @@ python probe_maker.py -f genes.txt
 ```
 
 ### Example 3: Gene Name Input (NCBI Integration)
-Create a file `gene_names.txt`:
+Create a file `top20_genes.txt`:
 ```
-BRCA1
-TP53
-EGFR
+SNHG19
+SNHG3
+STXBP5-AS1
+DANCR
+COA6-AS1
+NEAT1
+LINC01023
+SNHG26
+MINCR
+SNHG4
+KMT2E-AS1
+ERVK13-1
+SNHG21
+LINC00896
+SNHG10
+SNHG25
+HDAC4-AS1
+LINC01311
+ASH1L-AS1
+THUMPD3-AS1
 ```
 
 Run:
 ```bash
-python probe_maker.py -g gene_names.txt
+python probe_maker.py -g top20_genes.txt
 ```
 
 This will automatically fetch sequences from NCBI and generate 3 probe pairs for each gene.

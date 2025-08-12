@@ -375,25 +375,17 @@ class ProbeMaker:
         """Print results in a formatted way."""
         output_lines = []
         
+        # Add header for the two-column format
+        output_lines.append("LHS Probe (25 bases)\tRHS Probe (25 bases)")
+        output_lines.append("-" * 50 + "\t" + "-" * 50)
+        
         for result in results:
-            # Handle both single probes and multiple probe pairs
-            if 'gene_name' in result:
-                # Multiple probe pairs format
-                output_lines.append(f"Gene {result.get('gene_number', 'N/A')}: {result.get('gene_name', 'Unknown')}")
-                output_lines.append(f"  Probe Pair {result.get('pair_number', 'N/A')}:")
-            else:
-                # Single probe format
-                output_lines.append(f"Gene {result.get('gene_number', 'N/A')}:")
+            # Only show the probe sequences in two columns
+            lhs_probe = result['lhs_probe']
+            rhs_probe = result['rhs_probe']
             
-            output_lines.append(f"  Input ({result['input_type']}): {result['input_sequence']}")
-            output_lines.append(f"  mRNA: {result['mrna_sequence']}")
-            output_lines.append(f"  Reverse Complementary: {result['reverse_complementary_sequence']}")
-            output_lines.append(f"  50-Base Probe: {result['probe_50_base']}")
-            output_lines.append(f"  LHS Probe (25 bases): {result['lhs_probe']}")
-            output_lines.append(f"  RHS Probe (25 bases): {result['rhs_probe']}")
-            output_lines.append(f"  Probe Start Position: {result['probe_start_position']}")
-            output_lines.append(f"  GC Content: {result['gc_content_percentage']:.1f}%")
-            output_lines.append("")
+            # Format as tab-separated columns
+            output_lines.append(f"{lhs_probe}\t{rhs_probe}")
         
         # Print to console
         for line in output_lines:
@@ -427,7 +419,7 @@ Examples:
   python probe_maker.py -f genes.txt
   
   # Process gene names and fetch sequences from NCBI
-  python probe_maker.py -g gene_names.txt
+  python probe_maker.py -g top20_genes.txt
   
   # Save output to file
   python probe_maker.py -s "ATGCGATCGATCG" -o results.txt
