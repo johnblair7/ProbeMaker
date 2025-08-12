@@ -341,7 +341,7 @@ gene_names=BRCA1%0ATP53%0AEGFR
             
             try {
                 const formData = new FormData(form);
-                const response = await fetch('https://YOUR-RENDER-URL.onrender.com/generate', {
+                const response = await fetch('https://probe-maker-backend.onrender.com/generate', {
                     method: 'POST',
                     body: formData
                 });
@@ -363,7 +363,7 @@ gene_names=BRCA1%0ATP53%0AEGFR
                     
                     // Show download section
                     const downloadBtn = document.getElementById('downloadBtn');
-                    downloadBtn.href = `https://YOUR-RENDER-URL.onrender.com/download/${result.file_path.split('/').pop()}`;
+                    downloadBtn.href = `https://probe-maker-backend.onrender.com/download/${result.file_path.split('/').pop()}`;
                     downloadSection.style.display = 'block';
                     
                 } else {
