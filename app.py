@@ -5,12 +5,16 @@ A web interface for generating complementary sequences to mRNA for given genes.
 """
 
 from flask import Flask, render_template, request, send_file, jsonify
+from flask_cors import CORS
 import os
 import tempfile
 import time
 from probe_maker import ProbeMaker, GeneSequenceFetcher
 
 app = Flask(__name__)
+
+# Enable CORS for all routes
+CORS(app, origins=['https://*.netlify.app', 'http://localhost:*'])
 
 # Global variables for session management
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')

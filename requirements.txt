@@ -1,6 +1,7 @@
 # External dependencies
 requests>=2.25.0
 Flask>=2.0.0
+flask-cors>=4.0.0
 gunicorn>=20.1.0
 
 # Python 3.6+ required for type hints and f-strings
