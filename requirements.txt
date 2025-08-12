@@ -1,0 +1,4 @@
+# External dependencies
+requests>=2.25.0
+
+# Python 3.6+ required for type hints and f-strings
