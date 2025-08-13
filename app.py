@@ -14,7 +14,7 @@ from probe_maker import ProbeMaker, GeneSequenceFetcher
 app = Flask(__name__)
 
 # Enable CORS for all routes
-CORS(app, origins=['https://*.netlify.app', 'http://localhost:*'])
+CORS(app, origins=['*'])
 
 # Global variables for session management
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
