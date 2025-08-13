@@ -510,17 +510,18 @@ class ProbeMaker:
         output_lines = []
         
         # Add header for the three-column format
-        output_lines.append("LHS Probe (25 bases)\tRHS Probe (25 bases)\tGene Name")
-        output_lines.append("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20)
+        output_lines.append("LHS Probe (25 bases)\tRHS Probe (25 bases)\tCombined Probe (50 bases)\tGene Name")
+        output_lines.append("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20)
         
         for result in results:
-            # Show the probe sequences and gene name in three columns
+            # Show the probe sequences and gene name in four columns
             lhs_probe = result['lhs_probe']
             rhs_probe = result['rhs_probe']
+            combined_probe = lhs_probe + rhs_probe  # Combine LHS and RHS
             gene_name = result.get('gene_name', 'Unknown')
             
             # Format as tab-separated columns
-            output_lines.append(f"{lhs_probe}\t{rhs_probe}\t{gene_name}")
+            output_lines.append(f"{lhs_probe}\t{rhs_probe}\t{combined_probe}\t{gene_name}")
         
         # Print to console
         for line in output_lines:

@@ -58,15 +58,16 @@ def generate_probes():
             # Create temporary file for download
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as temp_file:
                 # Write header
-                temp_file.write("LHS Probe (25 bases)\tRHS Probe (25 bases)\tGene Name\n")
-                temp_file.write("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20 + "\n")
+                temp_file.write("LHS Probe (25 bases)\tRHS Probe (25 bases)\tCombined Probe (50 bases)\tGene Name\n")
+                temp_file.write("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20 + "\n")
                 
                 # Write probe data
                 for result in results:
                     lhs_probe = result['lhs_probe']
                     rhs_probe = result['rhs_probe']
+                    combined_probe = lhs_probe + rhs_probe  # Combine LHS and RHS
                     gene_name = result.get('gene_name', 'Unknown')
-                    temp_file.write(f"{lhs_probe}\t{rhs_probe}\t{gene_name}\n")
+                    temp_file.write(f"{lhs_probe}\t{rhs_probe}\t{combined_probe}\t{gene_name}\n")
                 
                 temp_file_path = temp_file.name
             
