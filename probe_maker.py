@@ -351,12 +351,23 @@ class ProbeMaker:
         if probe[24] != 'T':
             return False, f"Position 25 must be T, but got {probe[24]}"
         
-        # Check GC content constraint
-        gc_count = probe.count('G') + probe.count('C')
-        gc_percentage = (gc_count / len(probe)) * 100
+        # Check GC content constraint for each 25-base half separately
+        lhs_half = probe[:25]
+        rhs_half = probe[25:]
         
-        if gc_percentage < 44 or gc_percentage > 72:
-            return False, f"GC content {gc_percentage:.1f}% is outside allowed range (44%-72%)"
+        # Check LHS half (first 25 bases)
+        lhs_gc_count = lhs_half.count('G') + lhs_half.count('C')
+        lhs_gc_percentage = (lhs_gc_count / len(lhs_half)) * 100
+        
+        if lhs_gc_percentage < 44 or lhs_gc_percentage > 72:
+            return False, f"LHS half GC content {lhs_gc_percentage:.1f}% is outside allowed range (44%-72%)"
+        
+        # Check RHS half (last 25 bases)
+        rhs_gc_count = rhs_half.count('G') + rhs_half.count('C')
+        rhs_gc_percentage = (rhs_gc_count / len(rhs_half)) * 100
+        
+        if rhs_gc_percentage < 44 or rhs_gc_percentage > 72:
+            return False, f"RHS half GC content {rhs_gc_percentage:.1f}% is outside allowed range (44%-72%)"
         
         # Check homopolymer repeat constraint (no more than 4 of the same nucleotide in a row)
         for i in range(len(probe) - 3):  # Check 4-nucleotide windows
@@ -364,7 +375,7 @@ class ProbeMaker:
             if len(set(window)) == 1:  # All nucleotides in window are the same
                 return False, f"Homopolymer repeat found: {window} at position {i+1}-{i+4}"
         
-        return True, f"Valid probe: GC content {gc_percentage:.1f}%, position 25 is T, no homopolymer repeats"
+        return True, f"Valid probe: LHS GC {lhs_gc_percentage:.1f}%, RHS GC {rhs_gc_percentage:.1f}%, position 25 is T, no homopolymer repeats"
     
     def find_valid_probe_start(self, reverse_complement: str, original_mrna: str, start_offset: int = 0) -> tuple[str, int]:
         """Find a valid starting position for a 50-base probe that meets all constraints."""
