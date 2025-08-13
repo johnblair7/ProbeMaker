@@ -63,9 +63,9 @@ def generate_probes():
                 
                 # Write probe data
                 for result in results:
-                    lhs_probe = result['lhs_probe']
-                    rhs_probe = result['rhs_probe']
-                    combined_probe = lhs_probe + rhs_probe  # Combine LHS and RHS
+                    lhs_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe']  # Add adapter sequence before LHS
+                    rhs_probe = "/5Phos/" + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Add 5' phosphorylation before RHS and new tail sequence after
+                    combined_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe'] + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Include all sequences in combined
                     gene_name = result.get('gene_name', 'Unknown')
                     temp_file.write(f"{lhs_probe}\t{rhs_probe}\t{combined_probe}\t{gene_name}\n")
                 
