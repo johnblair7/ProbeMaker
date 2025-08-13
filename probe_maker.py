@@ -528,7 +528,7 @@ class ProbeMaker:
             # Show the probe sequences and gene name in four columns
             lhs_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe']  # Add adapter sequence before LHS
             rhs_probe = "/5Phos/" + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Add 5' phosphorylation before RHS and new tail sequence after
-            combined_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe'] + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Include all sequences in combined
+            combined_probe = result['lhs_probe'] + result['rhs_probe']  # Just the 50 bases complementary to RNA (no adapters)
             gene_name = result.get('gene_name', 'Unknown')
             
             # Format as tab-separated columns
