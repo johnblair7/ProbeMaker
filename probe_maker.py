@@ -481,8 +481,11 @@ class ProbeMaker:
         
         return results
     
-    def process_gene_names(self, gene_names: List[str], sequence_fetcher: GeneSequenceFetcher) -> List[Dict[str, str]]:
-        """Process a list of gene names, fetch sequences, and generate multiple probe pairs."""
+    def process_gene_names(self, gene_names: List[str], sequence_fetcher: GeneSequenceFetcher, num_pairs: int = 3) -> List[Dict[str, str]]:
+        """Process a list of gene names, fetch sequences, and generate multiple probe pairs.
+
+        num_pairs controls how many probe pairs to attempt per gene (allowed: 2 or 3).
+        """
         all_results = []
         
         for i, gene_name in enumerate(gene_names, 1):
@@ -498,7 +501,8 @@ class ProbeMaker:
                 print(f"  Fetched sequence: {len(sequence)} bases")
                 
                 # Generate multiple probe pairs for this gene
-                probe_pairs = self.generate_multiple_probe_pairs(sequence, is_dna=True, num_pairs=3)
+                requested_pairs = 3 if num_pairs not in (2, 3) else num_pairs
+                probe_pairs = self.generate_multiple_probe_pairs(sequence, is_dna=True, num_pairs=requested_pairs)
                 
                 # Add gene information to each probe pair
                 for probe_pair in probe_pairs:
@@ -589,6 +593,14 @@ Examples:
     )
     
     parser.add_argument(
+        '--num-pairs',
+        type=int,
+        choices=[2, 3],
+        default=3,
+        help='Number of probe pairs per gene to generate (2 or 3, default: 3)'
+    )
+
+    parser.add_argument(
         '--rna',
         action='store_true',
         help='Treat input sequence as RNA instead of DNA'
@@ -663,7 +675,7 @@ Examples:
             
             try:
                 # Process gene names and generate multiple probe pairs
-                results = probe_maker.process_gene_names(gene_names, sequence_fetcher)
+                results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=args.num_pairs)
                 
                 if results:
                     print(f"\nSuccessfully generated {len(results)} probe pairs for {len(gene_names)} genes")

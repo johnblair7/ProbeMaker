@@ -31,6 +31,14 @@ def generate_probes():
     try:
         # Get gene names from form
         gene_input = request.form.get('gene_names', '').strip()
+        # Optional: number of probe pairs per gene (2 or 3)
+        num_pairs_raw = request.form.get('num_pairs', '').strip()
+        try:
+            num_pairs = int(num_pairs_raw) if num_pairs_raw else 3
+        except ValueError:
+            num_pairs = 3
+        if num_pairs not in (2, 3):
+            num_pairs = 3
         
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
@@ -50,7 +58,7 @@ def generate_probes():
         
         try:
             # Process gene names and generate probe pairs
-            results = probe_maker.process_gene_names(gene_names, sequence_fetcher)
+            results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=num_pairs)
             
             if not results:
                 return jsonify({'error': 'No valid probe pairs could be generated'}), 400
@@ -77,7 +85,8 @@ def generate_probes():
                 'message': f'Successfully generated {len(results)} probe pairs for {len(gene_names)} genes',
                 'file_path': temp_file_path,
                 'gene_count': len(gene_names),
-                'probe_count': len(results)
+                'probe_count': len(results),
+                'num_pairs_per_gene': num_pairs
             })
             
         finally:
