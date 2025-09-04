@@ -91,7 +91,8 @@ def generate_probes():
             blast_file_path = None
             if blast_analysis:
                 try:
-                    blast_report = probe_maker.generate_blast_report(results, species=species)
+                    # Use shorter timeout for web requests (20 seconds per search)
+                    blast_report = probe_maker.generate_blast_report(results, species=species, timeout_seconds=20)
                     
                     # Create temporary file for BLAST report
                     with tempfile.NamedTemporaryFile(mode='w', suffix='_blast_report.txt', delete=False, encoding='utf-8') as blast_file:

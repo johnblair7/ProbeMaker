@@ -30,8 +30,8 @@ class BlastSearcher:
             "mouse": "nt"
         }
     
-    def blast_sequence(self, sequence: str, max_hits: int = 10) -> Optional[Dict]:
-        """Perform BLAST search for a given sequence."""
+    def blast_sequence(self, sequence: str, max_hits: int = 10, timeout_seconds: int = 30) -> Optional[Dict]:
+        """Perform BLAST search for a given sequence with timeout."""
         try:
             # Submit BLAST job
             submit_url = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
@@ -46,19 +46,25 @@ class BlastSearcher:
                 'FORMAT_TYPE': 'JSON2'
             }
             
-            response = self.session.get(submit_url, params=submit_params)
+            response = self.session.get(submit_url, params=submit_params, timeout=10)
             response.raise_for_status()
             
             # Extract RID (Request ID) from response
             rid_match = re.search(r'RID = ([A-Z0-9-]+)', response.text)
             if not rid_match:
-                return None
+                return {'error': 'Failed to get BLAST request ID'}
             
             rid = rid_match.group(1)
             
-            # Poll for results
-            max_attempts = 30
+            # Poll for results with timeout
+            max_attempts = min(15, timeout_seconds // 2)  # Check every 2 seconds, max 15 attempts
+            start_time = time.time()
+            
             for attempt in range(max_attempts):
+                # Check if we've exceeded timeout
+                if time.time() - start_time > timeout_seconds:
+                    return {'error': f'BLAST search timed out after {timeout_seconds} seconds'}
+                
                 time.sleep(2)  # Wait 2 seconds between checks
                 
                 status_url = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
@@ -68,10 +74,10 @@ class BlastSearcher:
                     'FORMAT_TYPE': 'JSON2'
                 }
                 
-                status_response = self.session.get(status_url, params=status_params)
-                status_response.raise_for_status()
-                
                 try:
+                    status_response = self.session.get(status_url, params=status_params, timeout=10)
+                    status_response.raise_for_status()
+                    
                     result_data = status_response.json()
                     
                     # Check if search is complete
@@ -80,16 +86,23 @@ class BlastSearcher:
                     elif 'Status' in result_data and 'WAITING' in result_data['Status']:
                         continue  # Still processing
                     else:
-                        return None
+                        return {'error': 'BLAST search failed or returned no results'}
                         
                 except json.JSONDecodeError:
                     continue
+                except requests.exceptions.Timeout:
+                    return {'error': 'BLAST status check timed out'}
+                except requests.exceptions.RequestException as e:
+                    return {'error': f'BLAST request failed: {str(e)}'}
             
-            return None
+            return {'error': f'BLAST search timed out after {timeout_seconds} seconds (no results)'}
             
+        except requests.exceptions.Timeout:
+            return {'error': 'BLAST submission timed out'}
+        except requests.exceptions.RequestException as e:
+            return {'error': f'BLAST submission failed: {str(e)}'}
         except Exception as e:
-            print(f"BLAST search error: {e}")
-            return None
+            return {'error': f'BLAST search error: {str(e)}'}
     
     def _parse_blast_results(self, data: Dict) -> Dict:
         """Parse BLAST results and extract relevant information."""
@@ -614,8 +627,8 @@ class ProbeMaker:
         
         return results
     
-    def generate_blast_report(self, results: List[Dict[str, str]], species: str = "human") -> str:
-        """Generate a BLAST report for all probe sequences."""
+    def generate_blast_report(self, results: List[Dict[str, str]], species: str = "human", timeout_seconds: int = 30) -> str:
+        """Generate a BLAST report for all probe sequences with timeout handling."""
         blast_searcher = BlastSearcher(species=species)
         report_lines = []
         
@@ -623,7 +636,11 @@ class ProbeMaker:
         report_lines.append("=" * 50)
         report_lines.append(f"Species: {species.upper()}")
         report_lines.append(f"Total probes analyzed: {len(results)}")
+        report_lines.append(f"Timeout per search: {timeout_seconds} seconds")
         report_lines.append("")
+        
+        successful_searches = 0
+        failed_searches = 0
         
         for i, result in enumerate(results, 1):
             probe_sequence = result['lhs_probe'] + result['rhs_probe']
@@ -633,10 +650,11 @@ class ProbeMaker:
             report_lines.append(f"Sequence: {probe_sequence}")
             report_lines.append("-" * 30)
             
-            print(f"  BLASTing probe {i} for {gene_name}...")
-            blast_results = blast_searcher.blast_sequence(probe_sequence)
+            print(f"  BLASTing probe {i} for {gene_name}... (timeout: {timeout_seconds}s)")
+            blast_results = blast_searcher.blast_sequence(probe_sequence, timeout_seconds=timeout_seconds)
             
             if blast_results and 'error' not in blast_results:
+                successful_searches += 1
                 report_lines.append(f"Query length: {blast_results['query_length']} bp")
                 report_lines.append(f"Total hits found: {blast_results['total_hits']}")
                 report_lines.append("")
@@ -654,11 +672,20 @@ class ProbeMaker:
                 else:
                     report_lines.append("No significant hits found.")
             else:
-                report_lines.append("BLAST search failed or returned no results.")
+                failed_searches += 1
+                error_msg = blast_results.get('error', 'Unknown error') if blast_results else 'No response'
+                report_lines.append(f"BLAST search failed: {error_msg}")
             
             report_lines.append("")
             report_lines.append("=" * 50)
             report_lines.append("")
+        
+        # Add summary
+        report_lines.append("SUMMARY")
+        report_lines.append("=" * 20)
+        report_lines.append(f"Successful searches: {successful_searches}")
+        report_lines.append(f"Failed searches: {failed_searches}")
+        report_lines.append(f"Success rate: {(successful_searches/len(results)*100):.1f}%")
         
         return "\n".join(report_lines)
     
