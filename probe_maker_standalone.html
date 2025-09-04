@@ -277,6 +277,15 @@ BRAF" required></textarea>
                         <option value="mouse">Mouse</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="blastAnalysis" name="blast_analysis" style="transform: scale(1.2);">
+                        <span>🔬 Generate BLAST report for probe specificity analysis</span>
+                    </label>
+                    <div class="example-text" style="margin-top: 5px; font-size: 0.9rem; color: #666;">
+                        ⚠️ Note: BLAST analysis may take several minutes and will create an additional report file
+                    </div>
+                </div>
 
                 <button type="submit" class="btn" id="generateBtn">
                     🚀 Generate Probe Sequences
@@ -292,6 +301,9 @@ BRAF" required></textarea>
             <div class="download-section" id="downloadSection" style="display: none;">
                 <a href="#" class="download-btn" id="downloadBtn">
                     📥 Download Probe Sequences (.txt)
+                </a>
+                <a href="#" class="download-btn" id="blastDownloadBtn" style="display: none; margin-left: 10px; background: #6f42c1;">
+                    🔬 Download BLAST Report (.txt)
                 </a>
             </div>
         </div>
@@ -379,6 +391,15 @@ gene_names=BRCA1%0ATP53%0AEGFR
                     const downloadBtn = document.getElementById('downloadBtn');
                     downloadBtn.href = `https://probe-maker-backend.onrender.com/download/${result.file_path.split('/').pop()}`;
                     downloadSection.style.display = 'block';
+                    
+                    // Show BLAST report download if available
+                    if (result.blast_file_path) {
+                        const blastDownloadBtn = document.getElementById('blastDownloadBtn');
+                        if (blastDownloadBtn) {
+                            blastDownloadBtn.href = `https://probe-maker-backend.onrender.com/download_blast/${result.blast_file_path.split('/').pop()}`;
+                            blastDownloadBtn.style.display = 'inline-block';
+                        }
+                    }
                     
                 } else {
                     // Error

@@ -11,6 +11,130 @@ import requests
 import time
 from typing import List, Dict, Optional
 import re
+import json
+
+
+class BlastSearcher:
+    """Class for performing BLAST searches against NCBI databases."""
+    
+    def __init__(self, species="human"):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'ProbeMaker/1.0 (Research Tool)'
+        })
+        self.species = species.lower()
+        
+        # Define species-specific BLAST databases
+        self.blast_databases = {
+            "human": "nt",
+            "mouse": "nt"
+        }
+    
+    def blast_sequence(self, sequence: str, max_hits: int = 10) -> Optional[Dict]:
+        """Perform BLAST search for a given sequence."""
+        try:
+            # Submit BLAST job
+            submit_url = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
+            submit_params = {
+                'CMD': 'Put',
+                'PROGRAM': 'blastn',
+                'DATABASE': self.blast_databases.get(self.species, 'nt'),
+                'QUERY': sequence,
+                'HITLIST_SIZE': max_hits,
+                'FILTER': 'L',
+                'EXPECT': '1000',
+                'FORMAT_TYPE': 'JSON2'
+            }
+            
+            response = self.session.get(submit_url, params=submit_params)
+            response.raise_for_status()
+            
+            # Extract RID (Request ID) from response
+            rid_match = re.search(r'RID = ([A-Z0-9-]+)', response.text)
+            if not rid_match:
+                return None
+            
+            rid = rid_match.group(1)
+            
+            # Poll for results
+            max_attempts = 30
+            for attempt in range(max_attempts):
+                time.sleep(2)  # Wait 2 seconds between checks
+                
+                status_url = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
+                status_params = {
+                    'CMD': 'Get',
+                    'RID': rid,
+                    'FORMAT_TYPE': 'JSON2'
+                }
+                
+                status_response = self.session.get(status_url, params=status_params)
+                status_response.raise_for_status()
+                
+                try:
+                    result_data = status_response.json()
+                    
+                    # Check if search is complete
+                    if 'BlastOutput2' in result_data:
+                        return self._parse_blast_results(result_data)
+                    elif 'Status' in result_data and 'WAITING' in result_data['Status']:
+                        continue  # Still processing
+                    else:
+                        return None
+                        
+                except json.JSONDecodeError:
+                    continue
+            
+            return None
+            
+        except Exception as e:
+            print(f"BLAST search error: {e}")
+            return None
+    
+    def _parse_blast_results(self, data: Dict) -> Dict:
+        """Parse BLAST results and extract relevant information."""
+        try:
+            blast_output = data.get('BlastOutput2', [{}])[0]
+            report = blast_output.get('report', {})
+            results = report.get('results', {})
+            search = results.get('search', {})
+            hits = search.get('hits', [])
+            
+            parsed_hits = []
+            for hit in hits[:10]:  # Limit to top 10 hits
+                hit_info = {
+                    'description': hit.get('description', [{}])[0].get('title', 'Unknown'),
+                    'accession': hit.get('description', [{}])[0].get('accession', 'Unknown'),
+                    'length': hit.get('len', 0),
+                    'hsps': []
+                }
+                
+                # Extract HSP (High-scoring Segment Pair) information
+                for hsp in hit.get('hsps', []):
+                    hsp_info = {
+                        'bit_score': hsp.get('bit_score', 0),
+                        'e_value': hsp.get('evalue', 0),
+                        'identity': hsp.get('identity', 0),
+                        'query_coverage': hsp.get('query_coverage', 0),
+                        'alignment_length': hsp.get('align_len', 0),
+                        'query_start': hsp.get('query_from', 0),
+                        'query_end': hsp.get('query_to', 0),
+                        'subject_start': hsp.get('hit_from', 0),
+                        'subject_end': hsp.get('hit_to', 0)
+                    }
+                    hit_info['hsps'].append(hsp_info)
+                
+                parsed_hits.append(hit_info)
+            
+            return {
+                'query_length': search.get('query_len', 0),
+                'total_hits': len(hits),
+                'hits': parsed_hits
+            }
+            
+        except Exception as e:
+            print(f"Error parsing BLAST results: {e}")
+            return {'error': str(e)}
 
 
 class GeneSequenceFetcher:
@@ -490,6 +614,54 @@ class ProbeMaker:
         
         return results
     
+    def generate_blast_report(self, results: List[Dict[str, str]], species: str = "human") -> str:
+        """Generate a BLAST report for all probe sequences."""
+        blast_searcher = BlastSearcher(species=species)
+        report_lines = []
+        
+        report_lines.append("BLAST REPORT - Probe Specificity Analysis")
+        report_lines.append("=" * 50)
+        report_lines.append(f"Species: {species.upper()}")
+        report_lines.append(f"Total probes analyzed: {len(results)}")
+        report_lines.append("")
+        
+        for i, result in enumerate(results, 1):
+            probe_sequence = result['lhs_probe'] + result['rhs_probe']
+            gene_name = result.get('gene_name', 'Unknown')
+            
+            report_lines.append(f"Probe {i}: {gene_name}")
+            report_lines.append(f"Sequence: {probe_sequence}")
+            report_lines.append("-" * 30)
+            
+            print(f"  BLASTing probe {i} for {gene_name}...")
+            blast_results = blast_searcher.blast_sequence(probe_sequence)
+            
+            if blast_results and 'error' not in blast_results:
+                report_lines.append(f"Query length: {blast_results['query_length']} bp")
+                report_lines.append(f"Total hits found: {blast_results['total_hits']}")
+                report_lines.append("")
+                
+                if blast_results['hits']:
+                    report_lines.append("Top hits:")
+                    report_lines.append("Rank\tAccession\tDescription\tBit Score\tE-value\tIdentity\tCoverage")
+                    report_lines.append("-" * 80)
+                    
+                    for j, hit in enumerate(blast_results['hits'][:5], 1):  # Top 5 hits
+                        if hit['hsps']:
+                            hsp = hit['hsps'][0]  # Best HSP
+                            description = hit['description'][:50] + "..." if len(hit['description']) > 50 else hit['description']
+                            report_lines.append(f"{j}\t{hit['accession']}\t{description}\t{hsp['bit_score']:.1f}\t{hsp['e_value']:.2e}\t{hsp['identity']}%\t{hsp['query_coverage']:.1f}%")
+                else:
+                    report_lines.append("No significant hits found.")
+            else:
+                report_lines.append("BLAST search failed or returned no results.")
+            
+            report_lines.append("")
+            report_lines.append("=" * 50)
+            report_lines.append("")
+        
+        return "\n".join(report_lines)
+    
     def process_gene_names(self, gene_names: List[str], sequence_fetcher: GeneSequenceFetcher, num_pairs: int = 3, species: str = "human") -> List[Dict[str, str]]:
         """Process a list of gene names, fetch sequences, and generate multiple probe pairs.
 
@@ -620,6 +792,12 @@ Examples:
         default='human',
         help='Species to search for (human or mouse, default: human)'
     )
+    
+    parser.add_argument(
+        '--blast',
+        action='store_true',
+        help='Generate BLAST report for probe specificity analysis'
+    )
 
     parser.add_argument(
         '--rna',
@@ -701,6 +879,23 @@ Examples:
                 if results:
                     print(f"\nSuccessfully generated {len(results)} probe pairs for {len(gene_names)} genes")
                     probe_maker.print_results(results, args.output)
+                    
+                    # Generate BLAST report if requested
+                    if args.blast:
+                        print("\nGenerating BLAST report for probe specificity analysis...")
+                        print("This may take several minutes...")
+                        blast_report = probe_maker.generate_blast_report(results, species=args.species)
+                        
+                        # Save BLAST report to file
+                        if args.output:
+                            blast_filename = args.output.replace('.txt', '_blast_report.txt')
+                        else:
+                            blast_filename = 'blast_report.txt'
+                        
+                        with open(blast_filename, 'w') as f:
+                            f.write(blast_report)
+                        
+                        print(f"BLAST report saved to: {blast_filename}")
                 else:
                     print("Error: No valid probe pairs could be generated")
                     sys.exit(1)

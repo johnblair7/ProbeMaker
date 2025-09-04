@@ -45,6 +45,9 @@ def generate_probes():
         if species not in ('human', 'mouse'):
             species = 'human'
         
+        # Optional: BLAST analysis
+        blast_analysis = request.form.get('blast_analysis', '').strip().lower() == 'on'
+        
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
         
@@ -84,15 +87,36 @@ def generate_probes():
                 
                 temp_file_path = temp_file.name
             
+            # Generate BLAST report if requested
+            blast_file_path = None
+            if blast_analysis:
+                try:
+                    blast_report = probe_maker.generate_blast_report(results, species=species)
+                    
+                    # Create temporary file for BLAST report
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='_blast_report.txt', delete=False, encoding='utf-8') as blast_file:
+                        blast_file.write(blast_report)
+                        blast_file_path = blast_file.name
+                        
+                except Exception as e:
+                    print(f"BLAST analysis failed: {e}")
+                    # Continue without BLAST report
+            
             # Return success response with file info
-            return jsonify({
+            response_data = {
                 'success': True,
                 'message': f'Successfully generated {len(results)} probe pairs for {len(gene_names)} genes',
                 'file_path': temp_file_path,
                 'gene_count': len(gene_names),
                 'probe_count': len(results),
                 'num_pairs_per_gene': num_pairs
-            })
+            }
+            
+            if blast_file_path:
+                response_data['blast_file_path'] = blast_file_path
+                response_data['message'] += ' (BLAST report included)'
+            
+            return jsonify(response_data)
             
         finally:
             sequence_fetcher.close()
@@ -134,6 +158,41 @@ def download_file(filename):
         
     except Exception as e:
         return jsonify({'error': f'Error downloading file: {str(e)}'}), 500
+
+@app.route('/download_blast/<path:filename>')
+def download_blast_file(filename):
+    """Download the BLAST report file."""
+    try:
+        # Security check - only allow .txt files from temp directory
+        if not filename.endswith('.txt') or '..' in filename:
+            return jsonify({'error': 'Invalid file'}), 400
+        
+        file_path = os.path.join(tempfile.gettempdir(), filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'BLAST report file not found'}), 404
+        
+        # Send file and then delete it
+        response = send_file(file_path, as_attachment=True, download_name='blast_report.txt')
+        
+        # Schedule file deletion after response is sent
+        def cleanup():
+            time.sleep(1)  # Wait for response to be sent
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+        
+        # Start cleanup in background
+        import threading
+        cleanup_thread = threading.Thread(target=cleanup)
+        cleanup_thread.daemon = True
+        cleanup_thread.start()
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': f'Error downloading BLAST report: {str(e)}'}), 500
 
 @app.route('/health')
 def health_check():
