@@ -40,6 +40,11 @@ def generate_probes():
         if num_pairs not in (2, 3):
             num_pairs = 3
         
+        # Optional: species selection (human or mouse)
+        species = request.form.get('species', 'human').strip().lower()
+        if species not in ('human', 'mouse'):
+            species = 'human'
+        
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
         
@@ -58,7 +63,7 @@ def generate_probes():
         
         try:
             # Process gene names and generate probe pairs
-            results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=num_pairs)
+            results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=num_pairs, species=species)
             
             if not results:
                 return jsonify({'error': 'No valid probe pairs could be generated'}), 400

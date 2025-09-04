@@ -16,20 +16,29 @@ import re
 class GeneSequenceFetcher:
     """Class for fetching gene sequences from online databases."""
     
-    def __init__(self):
+    def __init__(self, species="human"):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'ProbeMaker/1.0 (Research Tool)'
         })
+        self.species = species.lower()
+        
+        # Define species-specific search terms
+        self.species_terms = {
+            "human": "Homo sapiens[Organism]",
+            "mouse": "Mus musculus[Organism]"
+        }
     
     def fetch_gene_sequence(self, gene_name: str) -> Optional[str]:
         """Fetch mRNA sequence for a given gene name from NCBI."""
         try:
             # Search for the gene in NCBI
             search_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+            # Build species-specific search term
+            species_term = self.species_terms.get(self.species, self.species_terms["human"])
             search_params = {
                 'db': 'nucleotide',
-                'term': f"{gene_name}[Gene Name] AND (transcript[Title] OR mRNA[Title] OR RNA[Title])",
+                'term': f"{gene_name}[Gene Name] AND {species_term} AND (transcript[Title] OR mRNA[Title] OR RNA[Title])",
                 'retmode': 'json',
                 'retmax': 10
             }
@@ -79,7 +88,7 @@ class GeneSequenceFetcher:
             print(f"  Trying broader search for {gene_name}...")
             fallback_search_params = {
                 'db': 'nucleotide',
-                'term': f"{gene_name}[Gene Name]",
+                'term': f"{gene_name}[Gene Name] AND {species_term}",
                 'retmode': 'json',
                 'retmax': 5
             }
@@ -481,19 +490,23 @@ class ProbeMaker:
         
         return results
     
-    def process_gene_names(self, gene_names: List[str], sequence_fetcher: GeneSequenceFetcher, num_pairs: int = 3) -> List[Dict[str, str]]:
+    def process_gene_names(self, gene_names: List[str], sequence_fetcher: GeneSequenceFetcher, num_pairs: int = 3, species: str = "human") -> List[Dict[str, str]]:
         """Process a list of gene names, fetch sequences, and generate multiple probe pairs.
 
         num_pairs controls how many probe pairs to attempt per gene (allowed: 2 or 3).
+        species specifies which species to search for (human or mouse).
         """
         all_results = []
         
+        # Create a species-specific sequence fetcher
+        species_fetcher = GeneSequenceFetcher(species=species)
+        
         for i, gene_name in enumerate(gene_names, 1):
-            print(f"Processing gene {i}: {gene_name}")
+            print(f"Processing gene {i}: {gene_name} ({species})")
             
             try:
                 # Fetch the sequence for this gene
-                sequence = sequence_fetcher.fetch_gene_sequence(gene_name)
+                sequence = species_fetcher.fetch_gene_sequence(gene_name)
                 if not sequence:
                     print(f"Warning: Could not fetch sequence for gene '{gene_name}'")
                     continue
@@ -599,6 +612,14 @@ Examples:
         default=3,
         help='Number of probe pairs per gene to generate (2 or 3, default: 3)'
     )
+    
+    parser.add_argument(
+        '--species',
+        type=str,
+        choices=['human', 'mouse'],
+        default='human',
+        help='Species to search for (human or mouse, default: human)'
+    )
 
     parser.add_argument(
         '--rna',
@@ -675,7 +696,7 @@ Examples:
             
             try:
                 # Process gene names and generate multiple probe pairs
-                results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=args.num_pairs)
+                results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=args.num_pairs, species=args.species)
                 
                 if results:
                     print(f"\nSuccessfully generated {len(results)} probe pairs for {len(gene_names)} genes")
