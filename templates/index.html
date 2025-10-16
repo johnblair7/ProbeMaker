@@ -217,7 +217,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🧬 ProbeMaker</h1>
+            <h1>ProbeMaker</h1>
             <p>Generate complementary sequences to mRNA for your genes</p>
         </div>
 
@@ -233,7 +233,7 @@ EGFR
 KRAS
 BRAF" required></textarea>
                     <div class="example-text">
-                        💡 Tip: You can paste a list of gene names from Excel or any text file. Maximum 100 genes per request.
+                        Tip: You can paste a list of gene names from Excel or any text file. Maximum 100 genes per request.
                     </div>
                 </div>
                 <div class="form-group">
@@ -250,18 +250,9 @@ BRAF" required></textarea>
                         <option value="mouse">Mouse</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="blastAnalysis" name="blast_analysis" style="transform: scale(1.2);">
-                        <span>🔬 Generate BLAST report for probe specificity analysis</span>
-                    </label>
-                    <div class="example-text" style="margin-top: 5px; font-size: 0.9rem; color: #666;">
-                        ⚠️ Note: BLAST analysis has a 20-second timeout per probe and may not complete for all sequences
-                    </div>
-                </div>
 
                 <button type="submit" class="btn" id="generateBtn">
-                    🚀 Generate Probe Sequences
+                    Generate Probe Sequences
                 </button>
             </form>
 
@@ -273,29 +264,26 @@ BRAF" required></textarea>
 
             <div class="download-section" id="downloadSection" style="display: none;">
                 <a href="#" class="download-btn" id="downloadBtn">
-                    📥 Download Probe Sequences (.txt)
-                </a>
-                <a href="#" class="download-btn" id="blastDownloadBtn" style="display: none; margin-left: 10px; background: #6f42c1;">
-                    🔬 Download BLAST Report (.txt)
+                    Download Probe Sequences (.txt)
                 </a>
             </div>
         </div>
 
         <div class="features">
             <div class="feature">
-                <h3>🔬 Scientific Accuracy</h3>
+                <h3>Scientific Accuracy</h3>
                 <p>Generates reverse complementary sequences with proper DNA/RNA transcription</p>
             </div>
             <div class="feature">
-                <h3>📏 Probe Design</h3>
+                <h3>Probe Design</h3>
                 <p>Creates 50-base probes split into LHS/RHS 25-base segments</p>
             </div>
             <div class="feature">
-                <h3>⚡ NCBI Integration</h3>
+                <h3>NCBI Integration</h3>
                 <p>Automatically fetches gene sequences from NCBI databases</p>
             </div>
             <div class="feature">
-                <h3>🎯 Quality Constraints</h3>
+                <h3>Quality Constraints</h3>
                 <p>Enforces GC content, position constraints, and homopolymer limits</p>
             </div>
         </div>
@@ -316,7 +304,7 @@ BRAF" required></textarea>
             status.style.display = 'none';
             downloadSection.style.display = 'none';
             generateBtn.disabled = true;
-            generateBtn.textContent = '⏳ Processing...';
+            generateBtn.textContent = 'Processing...';
             progress.style.display = 'block';
             
             // Simulate progress
@@ -343,7 +331,7 @@ BRAF" required></textarea>
                     // Success
                     status.className = 'status success';
                     status.innerHTML = `
-                        <strong>✅ Success!</strong><br>
+                        <strong>Success!</strong><br>
                         ${result.message}<br>
                         <small>Generated ${result.probe_count} probe pairs for ${result.gene_count} genes</small>
                     `;
@@ -354,30 +342,21 @@ BRAF" required></textarea>
                     downloadBtn.href = `/download/${result.file_path.split('/').pop()}`;
                     downloadSection.style.display = 'block';
                     
-                    // Show BLAST report download if available
-                    if (result.blast_file_path) {
-                        const blastDownloadBtn = document.getElementById('blastDownloadBtn');
-                        if (blastDownloadBtn) {
-                            blastDownloadBtn.href = `/download_blast/${result.blast_file_path.split('/').pop()}`;
-                            blastDownloadBtn.style.display = 'inline-block';
-                        }
-                    }
-                    
                 } else {
                     // Error
                     status.className = 'status error';
-                    status.innerHTML = `<strong>❌ Error:</strong> ${result.error}`;
+                    status.innerHTML = `<strong>Error:</strong> ${result.error}`;
                     status.style.display = 'block';
                 }
                 
             } catch (error) {
                 clearInterval(progressInterval);
                 status.className = 'status error';
-                status.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+                status.innerHTML = `<strong>Error:</strong> ${error.message}`;
                 status.style.display = 'block';
             } finally {
                 generateBtn.disabled = false;
-                generateBtn.textContent = '🚀 Generate Probe Sequences';
+                generateBtn.textContent = 'Generate Probe Sequences';
                 setTimeout(() => {
                     progress.style.display = 'none';
                     progressBar.style.width = '0%';
