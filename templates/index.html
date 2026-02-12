@@ -258,6 +258,13 @@ BRAF" required></textarea>
                     </select>
                     <div class="example-text">Choose which adapter/handle sequences are added to the 25-base probe halves.</div>
                 </div>
+                <div class="form-group">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <input type="checkbox" name="run_blast" id="runBlast" value="on">
+                        <span>Include BLAST report in download (optional; can be slow or timeout)</span>
+                    </label>
+                    <div class="example-text">Leave unchecked to skip BLAST. Check to append a specificity report to the file.</div>
+                </div>
 
                 <button type="submit" class="btn" id="generateBtn">
                     Generate Probe Sequences

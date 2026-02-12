@@ -50,6 +50,9 @@ def generate_probes():
         if flex_mode not in ('v1', 'v2'):
             flex_mode = 'v1'
         
+        # Optional: Include BLAST report (default off — BLAST can be slow or timeout)
+        run_blast = request.form.get('run_blast', '').strip().lower() in ('on', 'true', '1', 'yes')
+        
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
         
@@ -89,6 +92,18 @@ def generate_probes():
                     temp_file.write(f"{lhs_with_handles}\t{rhs_with_handles}\t{combined_probe}\t{gene_name}\n")
                 
                 temp_file_path = temp_file.name
+            
+            # Optional: append BLAST report (only when user opts in; skipped by default to avoid timeouts)
+            if run_blast and results:
+                try:
+                    blast_report = probe_maker.generate_blast_report(results, species=species, timeout_seconds=30)
+                    with open(temp_file_path, 'a', encoding='utf-8') as f:
+                        f.write("\n\n")
+                        f.write(blast_report)
+                except Exception as blast_err:
+                    # Don't fail the whole request if BLAST fails; append a note
+                    with open(temp_file_path, 'a', encoding='utf-8') as f:
+                        f.write(f"\n\nBLAST report skipped: {blast_err}\n")
             
             # Return success response with file info
             response_data = {
