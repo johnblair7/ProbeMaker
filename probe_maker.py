@@ -182,106 +182,119 @@ class GeneSequenceFetcher:
         })
         self.species = species.lower()
         
-        # Define species-specific search terms
+        # Define species-specific search terms (NCBI)
         self.species_terms = {
             "human": "Homo sapiens[Organism]",
             "mouse": "Mus musculus[Organism]"
         }
+        # Ensembl species names for REST API
+        self.ensembl_species = {
+            "human": "homo_sapiens",
+            "mouse": "mus_musculus"
+        }
+    
+    def _fetch_from_ensembl(self, gene_name: str) -> Optional[str]:
+        """Fetch canonical (or longest) transcript cDNA from Ensembl, e.g. ENST00000357654 (BRCA1) length=7088."""
+        try:
+            species = self.ensembl_species.get(self.species, "homo_sapiens")
+            lookup_url = f"https://rest.ensembl.org/lookup/symbol/{species}/{gene_name}?expand=1"
+            r = self.session.get(lookup_url, headers={"Content-Type": "application/json"}, timeout=30)
+            if not r.ok:
+                return None
+            data = r.json()
+            transcripts = data.get("Transcript") or []
+            if not transcripts:
+                return None
+            # Prefer canonical transcript, else longest protein_coding, else longest
+            def sort_key(t):
+                canonical = 1 if t.get("is_canonical") else 0
+                coding = 1 if (t.get("biotype") == "protein_coding") else 0
+                length = t.get("length") or 0
+                return (canonical, coding, length)
+            chosen = max(transcripts, key=sort_key)
+            transcript_id = chosen.get("id")
+            if not transcript_id:
+                return None
+            seq_url = f"https://rest.ensembl.org/sequence/id/{transcript_id}?type=cdna"
+            r2 = self.session.get(seq_url, headers={"Content-Type": "text/x-fasta"}, timeout=30)
+            if not r2.ok:
+                return None
+            lines = r2.text.strip().split("\n")
+            sequence = re.sub(r"[^ATGCUatgcu]", "", "".join(lines[1:]))  # skip FASTA header
+            if len(sequence) >= 50 and self._is_good_sequence_candidate(sequence):
+                return sequence
+            return None
+        except Exception:
+            return None
     
     def fetch_gene_sequence(self, gene_name: str) -> Optional[str]:
-        """Fetch mRNA sequence for a given gene name from NCBI."""
+        """Fetch full-length mRNA sequence. Uses Ensembl first (canonical transcript, e.g. 7088 bp for BRCA1), then NCBI RefSeq."""
+        # Try Ensembl first so we get the canonical transcript (e.g. ENST00000357654 BRCA1 length=7088)
+        seq = self._fetch_from_ensembl(gene_name)
+        if seq:
+            return seq
+        # Fallback to NCBI RefSeq
         try:
-            # Search for the gene in NCBI
-            search_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-            # Build species-specific search term
+            search_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
             species_term = self.species_terms.get(self.species, self.species_terms["human"])
             search_params = {
                 'db': 'nucleotide',
-                'term': f"{gene_name}[Gene Name] AND {species_term} AND (transcript[Title] OR mRNA[Title] OR RNA[Title])",
+                'term': f"{gene_name}[Gene Name] AND {species_term} AND srcdb_refseq[prop] AND biomol_rna[prop]",
                 'retmode': 'json',
-                'retmax': 10
+                'retmax': 20
             }
-            
             response = self.session.get(search_url, params=search_params)
             response.raise_for_status()
-            
-            # Parse the search results
             search_data = response.json()
             if 'esearchresult' not in search_data or 'idlist' not in search_data['esearchresult']:
                 return None
-            
             gene_ids = search_data['esearchresult']['idlist']
             if not gene_ids:
                 return None
-            
-            # Try multiple results to find a good sequence
-            for gene_id in gene_ids[:5]:  # Try up to 5 results
+            candidates = []
+            for gene_id in gene_ids[:15]:
                 try:
-                    fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                    fetch_params = {
-                        'db': 'nucleotide',
-                        'id': gene_id,
-                        'rettype': 'fasta',
-                        'retmode': 'text'
-                    }
-                    
-                    response = self.session.get(fetch_url, params=fetch_params)
+                    time.sleep(0.35)
+                    fetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    response = self.session.get(fetch_url, params={
+                        'db': 'nucleotide', 'id': gene_id, 'rettype': 'fasta', 'retmode': 'text'
+                    })
                     response.raise_for_status()
-                    
-                    # Parse FASTA format and extract sequence
                     lines = response.text.strip().split('\n')
-                    sequence = ''.join(lines[1:])  # Skip header line
-                    
-                    # Clean the sequence (remove any non-nucleotide characters)
-                    sequence = re.sub(r'[^ATGCUatgcu]', '', sequence)
-                    
-                    # Check if this sequence is long enough and looks like a good candidate
+                    sequence = re.sub(r'[^ATGCUatgcu]', '', ''.join(lines[1:]))
                     if len(sequence) >= 50 and self._is_good_sequence_candidate(sequence):
-                        return sequence
-                        
-                except Exception as e:
-                    # If this result fails, try the next one
+                        candidates.append(sequence)
+                except Exception:
                     continue
-            
-            # If no good sequence found, try a broader search without transcript filter
-            print(f"  Trying broader search for {gene_name}...")
-            fallback_search_params = {
+            if candidates:
+                return max(candidates, key=len)
+            print(f"  No RefSeq mRNA found for {gene_name}, trying broader NCBI search...")
+            fallback_params = {
                 'db': 'nucleotide',
                 'term': f"{gene_name}[Gene Name] AND {species_term}",
                 'retmode': 'json',
-                'retmax': 5
+                'retmax': 15
             }
-            
-            response = self.session.get(search_url, params=fallback_search_params)
+            response = self.session.get(search_url, params=fallback_params)
             response.raise_for_status()
-            
             fallback_data = response.json()
             if 'esearchresult' in fallback_data and 'idlist' in fallback_data['esearchresult']:
-                fallback_ids = fallback_data['esearchresult']['idlist']
-                
-                for gene_id in fallback_ids[:3]:
+                for gene_id in fallback_data['esearchresult']['idlist'][:10]:
                     try:
-                        fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                        fetch_params = {
-                            'db': 'nucleotide',
-                            'id': gene_id,
-                            'rettype': 'fasta',
-                            'retmode': 'text'
-                        }
-                        
-                        response = self.session.get(fetch_url, params=fetch_params)
+                        time.sleep(0.35)
+                        response = self.session.get(
+                            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+                            params={'db': 'nucleotide', 'id': gene_id, 'rettype': 'fasta', 'retmode': 'text'}
+                        )
                         response.raise_for_status()
-                        
                         lines = response.text.strip().split('\n')
-                        sequence = ''.join(lines[1:])
-                        sequence = re.sub(r'[^ATGCUatgcu]', '', sequence)
-                        
+                        sequence = re.sub(r'[^ATGCUatgcu]', '', ''.join(lines[1:]))
                         if len(sequence) >= 50 and self._is_good_sequence_candidate(sequence):
-                            return sequence
-                            
-                    except Exception as e:
+                            candidates.append(sequence)
+                    except Exception:
                         continue
-            
+            if candidates:
+                return max(candidates, key=len)
             return None
             
         except requests.exceptions.HTTPError as e:
@@ -526,14 +539,12 @@ class ProbeMaker:
         # Check LHS half (first 25 bases)
         lhs_gc_count = lhs_half.count('G') + lhs_half.count('C')
         lhs_gc_percentage = (lhs_gc_count / len(lhs_half)) * 100
-        
         if lhs_gc_percentage < 44 or lhs_gc_percentage > 72:
             return False, f"LHS half GC content {lhs_gc_percentage:.1f}% is outside allowed range (44%-72%)"
         
         # Check RHS half (last 25 bases)
         rhs_gc_count = rhs_half.count('G') + rhs_half.count('C')
         rhs_gc_percentage = (rhs_gc_count / len(rhs_half)) * 100
-        
         if rhs_gc_percentage < 44 or rhs_gc_percentage > 72:
             return False, f"RHS half GC content {rhs_gc_percentage:.1f}% is outside allowed range (44%-72%)"
         
