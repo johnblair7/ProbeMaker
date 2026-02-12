@@ -9,7 +9,7 @@ from flask_cors import CORS
 import os
 import tempfile
 import time
-from probe_maker import ProbeMaker, GeneSequenceFetcher
+from probe_maker import ProbeMaker, GeneSequenceFetcher, apply_flex_handles
 
 app = Flask(__name__)
 
@@ -45,6 +45,11 @@ def generate_probes():
         if species not in ('human', 'mouse'):
             species = 'human'
         
+        # Optional: Flex mode (v1 = default handles, v2 = alternate handles)
+        flex_mode = request.form.get('flex_mode', 'v1').strip().lower()
+        if flex_mode not in ('v1', 'v2'):
+            flex_mode = 'v1'
+        
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
         
@@ -74,13 +79,14 @@ def generate_probes():
                 temp_file.write("LHS Probe (25 bases)\tRHS Probe (25 bases)\tCombined Probe (50 bases)\tGene Name\n")
                 temp_file.write("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20 + "\n")
                 
-                # Write probe data
+                # Write probe data (apply Flex v1 or v2 handles)
                 for result in results:
-                    lhs_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe']  # Add adapter sequence before LHS
-                    rhs_probe = "/5Phos/" + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Add 5' phosphorylation before RHS and new tail sequence after
-                    combined_probe = result['lhs_probe'] + result['rhs_probe']  # Just the 50 bases complementary to RNA (no adapters)
+                    lhs_with_handles, rhs_with_handles = apply_flex_handles(
+                        result['lhs_probe'], result['rhs_probe'], flex_mode
+                    )
+                    combined_probe = result['lhs_probe'] + result['rhs_probe']  # 50 bases, no adapters
                     gene_name = result.get('gene_name', 'Unknown')
-                    temp_file.write(f"{lhs_probe}\t{rhs_probe}\t{combined_probe}\t{gene_name}\n")
+                    temp_file.write(f"{lhs_with_handles}\t{rhs_with_handles}\t{combined_probe}\t{gene_name}\n")
                 
                 temp_file_path = temp_file.name
             

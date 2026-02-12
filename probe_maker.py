@@ -9,9 +9,31 @@ import argparse
 import sys
 import requests
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import re
 import json
+
+# Flex handle sequences applied to 25-base LHS/RHS probe halves.
+# v1 = default Chromium-style handles; v2 = alternate handles (customize FLEX_V2_* below).
+FLEX_V1_LHS_PREFIX = "CCTTGGCACCCGAGAATTCCA"
+FLEX_V1_RHS_PREFIX = "/5Phos/"
+FLEX_V1_RHS_SUFFIX = "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"
+
+# Flex v2 handles — replace these with your actual v2 sequences.
+FLEX_V2_LHS_PREFIX = "CCTTGGCACCCGAGAATTCCA"
+FLEX_V2_RHS_PREFIX = "/5Phos/"
+FLEX_V2_RHS_SUFFIX = "CCCATATAAGAAA"
+
+
+def apply_flex_handles(lhs_25: str, rhs_25: str, flex_mode: str = "v1") -> Tuple[str, str]:
+    """Return (lhs_with_handles, rhs_with_handles) for the given 25-base halves and flex mode."""
+    if flex_mode == "v2":
+        lhs_with_handles = FLEX_V2_LHS_PREFIX + lhs_25
+        rhs_with_handles = FLEX_V2_RHS_PREFIX + rhs_25 + FLEX_V2_RHS_SUFFIX
+    else:
+        lhs_with_handles = FLEX_V1_LHS_PREFIX + lhs_25
+        rhs_with_handles = FLEX_V1_RHS_PREFIX + rhs_25 + FLEX_V1_RHS_SUFFIX
+    return lhs_with_handles, rhs_with_handles
 
 
 class BlastSearcher:
@@ -732,8 +754,8 @@ class ProbeMaker:
         
         return all_results
     
-    def print_results(self, results: List[Dict[str, str]], output_file: Optional[str] = None):
-        """Print results in a formatted way."""
+    def print_results(self, results: List[Dict[str, str]], output_file: Optional[str] = None, flex_mode: str = "v1"):
+        """Print results in a formatted way. flex_mode: 'v1' (default) or 'v2' for different LHS/RHS handles."""
         output_lines = []
         
         # Add header for the three-column format
@@ -741,14 +763,14 @@ class ProbeMaker:
         output_lines.append("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20)
         
         for result in results:
-            # Show the probe sequences and gene name in four columns
-            lhs_probe = "CCTTGGCACCCGAGAATTCCA" + result['lhs_probe']  # Add adapter sequence before LHS
-            rhs_probe = "/5Phos/" + result['rhs_probe'] + "ACGCGGTTAGCACGTANNACTTTAGGCGGTCCTAGCAA"  # Add 5' phosphorylation before RHS and new tail sequence after
+            lhs_with_handles, rhs_with_handles = apply_flex_handles(
+                result['lhs_probe'], result['rhs_probe'], flex_mode
+            )
             combined_probe = result['lhs_probe'] + result['rhs_probe']  # Just the 50 bases complementary to RNA (no adapters)
             gene_name = result.get('gene_name', 'Unknown')
             
             # Format as tab-separated columns
-            output_lines.append(f"{lhs_probe}\t{rhs_probe}\t{combined_probe}\t{gene_name}")
+            output_lines.append(f"{lhs_with_handles}\t{rhs_with_handles}\t{combined_probe}\t{gene_name}")
         
         # Print to console
         for line in output_lines:
@@ -821,6 +843,14 @@ Examples:
     )
     
     parser.add_argument(
+        '--flex-mode',
+        type=str,
+        choices=['v1', 'v2'],
+        default='v1',
+        help='Handle set for LHS/RHS probes: v1 (default) or v2'
+    )
+    
+    parser.add_argument(
         '--blast',
         action='store_true',
         help='Generate BLAST report for probe specificity analysis'
@@ -854,7 +884,7 @@ Examples:
         # Single sequence mode
         try:
             result = probe_maker.generate_mrna_complement(args.sequence, not args.rna)
-            probe_maker.print_results([result], args.output)
+            probe_maker.print_results([result], args.output, flex_mode=args.flex_mode)
         except ValueError as e:
             print(f"Error: {e}")
             sys.exit(1)
@@ -871,7 +901,7 @@ Examples:
             
             results = probe_maker.process_gene_list(gene_list, not args.rna)
             if results:
-                probe_maker.print_results(results, args.output)
+                probe_maker.print_results(results, args.output, flex_mode=args.flex_mode)
             else:
                 print("Error: No valid sequences could be processed")
                 sys.exit(1)
@@ -905,7 +935,7 @@ Examples:
                 
                 if results:
                     print(f"\nSuccessfully generated {len(results)} probe pairs for {len(gene_names)} genes")
-                    probe_maker.print_results(results, args.output)
+                    probe_maker.print_results(results, args.output, flex_mode=args.flex_mode)
                     
                     # Generate BLAST report if requested
                     if args.blast:

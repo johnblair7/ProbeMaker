@@ -250,6 +250,14 @@ BRAF" required></textarea>
                         <option value="mouse">Mouse</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label for="flexMode">Flex mode (handles on LHS/RHS):</label>
+                    <select id="flexMode" name="flex_mode" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
+                        <option value="v1" selected>Flex v1 (default)</option>
+                        <option value="v2">Flex v2</option>
+                    </select>
+                    <div class="example-text">Choose which adapter/handle sequences are added to the 25-base probe halves.</div>
+                </div>
 
                 <button type="submit" class="btn" id="generateBtn">
                     Generate Probe Sequences
