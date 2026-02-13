@@ -250,47 +250,77 @@
 
         <div class="card">
             <form id="probeForm">
+                <input type="hidden" name="mode" id="formMode" value="probe">
                 <div class="form-group">
-                    <label for="geneNames">Enter Gene Names (one per line):</label>
-                    <textarea id="geneNames" name="gene_names" placeholder="Enter your gene names here, one per line. For example:
+                    <label>Mode:</label>
+                    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                            <input type="radio" name="modeRadio" value="probe" id="modeProbe" checked>
+                            <span>Probe (gene names)</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                            <input type="radio" name="modeRadio" value="guide_rna" id="modeGuideRNA">
+                            <span>Guide RNA (20-base sequences)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="probeModePanel">
+                    <div class="form-group">
+                        <label for="geneNames">Enter Gene Names (one per line):</label>
+                        <textarea id="geneNames" name="gene_names" placeholder="Enter your gene names here, one per line. For example:
 
 BRCA1
 TP53
 EGFR
 KRAS
-BRAF" required></textarea>
-                    <div class="example-text">
-                        Tip: You can paste a list of gene names from Excel or any text file. Maximum 100 genes per request.
+BRAF"></textarea>
+                        <div class="example-text">
+                            Tip: You can paste a list of gene names from Excel or any text file. Maximum 100 genes per request.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="numPairs">Probes per gene:</label>
+                        <select id="numPairs" name="num_pairs" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
+                            <option value="3" selected>3 (default)</option>
+                            <option value="2">2</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="species">Species:</label>
+                        <select id="species" name="species" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
+                            <option value="human" selected>Human</option>
+                            <option value="mouse">Mouse</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" name="run_blast" id="runBlast" value="on">
+                            <span>Include BLAST report in download (optional; can be slow or timeout)</span>
+                        </label>
+                        <div class="example-text">Leave unchecked to skip BLAST. Check to append a specificity report to the file.</div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="numPairs">Probes per gene:</label>
-                    <select id="numPairs" name="num_pairs" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
-                        <option value="3" selected>3 (default)</option>
-                        <option value="2">2</option>
-                    </select>
+
+                <div id="guideRNAModePanel" style="display:none;">
+                    <div class="form-group">
+                        <label for="guideSequences">Enter 20-base guide RNA sequences (one per line):</label>
+                        <textarea id="guideSequences" name="guide_sequences" placeholder="Exactly 20 bases per line, A/T/G/C only. RHS uses reverse complement. For example:
+
+GAGTCCGAGCAGAAGAAGAA"></textarea>
+                        <div class="example-text">
+                            No lookup: same LHS for all; RHS = prefix + reverse complement(20 bases) + suffix. Max 500 per request.
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="species">Species:</label>
-                    <select id="species" name="species" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
-                        <option value="human" selected>Human</option>
-                        <option value="mouse">Mouse</option>
-                    </select>
-                </div>
+
                 <div class="form-group">
                     <label for="flexMode">Flex mode (handles on LHS/RHS):</label>
                     <select id="flexMode" name="flex_mode" style="width:100%; padding:12px; border: 2px solid #e1e5e9; border-radius:8px;">
                         <option value="v1" selected>Flex v1 (default)</option>
                         <option value="v2">Flex v2</option>
                     </select>
-                    <div class="example-text">Choose which adapter/handle sequences are added to the 25-base probe halves.</div>
-                </div>
-                <div class="form-group">
-                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                        <input type="checkbox" name="run_blast" id="runBlast" value="on">
-                        <span>Include BLAST report in download (optional; can be slow or timeout)</span>
-                    </label>
-                    <div class="example-text">Leave unchecked to skip BLAST. Check to append a specificity report to the file.</div>
+                    <div class="example-text">Choose which adapter/handle sequences are added (Probe: 25-base halves; Guide RNA: default LHS and your 20-mer RHS).</div>
                 </div>
 
                 <button type="submit" class="btn" id="generateBtn">
@@ -347,6 +377,26 @@ gene_names=BRCA1%0ATP53%0AEGFR
     </div>
 
     <script>
+        // Mode toggle: Probe vs Guide RNA
+        const formModeInput = document.getElementById('formMode');
+        const modeProbe = document.getElementById('modeProbe');
+        const modeGuideRNA = document.getElementById('modeGuideRNA');
+        const probeModePanel = document.getElementById('probeModePanel');
+        const guideRNAModePanel = document.getElementById('guideRNAModePanel');
+        const geneNamesTa = document.getElementById('geneNames');
+        const guideSequencesTa = document.getElementById('guideSequences');
+        function updateMode() {
+            const isGuide = modeGuideRNA.checked;
+            formModeInput.value = isGuide ? 'guide_rna' : 'probe';
+            probeModePanel.style.display = isGuide ? 'none' : 'block';
+            guideRNAModePanel.style.display = isGuide ? 'block' : 'none';
+            geneNamesTa.required = !isGuide;
+            guideSequencesTa.required = isGuide;
+        }
+        modeProbe.addEventListener('change', updateMode);
+        modeGuideRNA.addEventListener('change', updateMode);
+        updateMode();
+
         document.getElementById('probeForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
