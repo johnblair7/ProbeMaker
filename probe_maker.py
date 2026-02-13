@@ -24,6 +24,16 @@ FLEX_V2_LHS_PREFIX = "CCTTGGCACCCGAGAATTCCA"
 FLEX_V2_RHS_PREFIX = "/5Phos/"
 FLEX_V2_RHS_SUFFIX = "CCCATATAAGAAA"
 
+# Guide RNA mode: fixed 25-base LHS (prefix varies by Flex); RHS prefix is fixed, suffix varies by Flex.
+GUIDE_MODE_DEFAULT_LHS_25 = "GCTATGCTGTTTCCAGCTTAGCTCT"
+GUIDE_RHS_PREFIX = "/5Phos/TAAAC"  # Same for both Flex v1 and v2; suffix is flex-specific below.
+
+
+def _reverse_complement_dna(seq: str) -> str:
+    """Return reverse complement of a DNA sequence (A<->T, G<->C, then reverse)."""
+    comp = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
+    return "".join(comp.get(b, b) for b in seq.upper())[::-1]
+
 
 def apply_flex_handles(lhs_25: str, rhs_25: str, flex_mode: str = "v1") -> Tuple[str, str]:
     """Return (lhs_with_handles, rhs_with_handles) for the given 25-base halves and flex mode."""
@@ -34,6 +44,52 @@ def apply_flex_handles(lhs_25: str, rhs_25: str, flex_mode: str = "v1") -> Tuple
         lhs_with_handles = FLEX_V1_LHS_PREFIX + lhs_25
         rhs_with_handles = FLEX_V1_RHS_PREFIX + rhs_25 + FLEX_V1_RHS_SUFFIX
     return lhs_with_handles, rhs_with_handles
+
+
+def apply_flex_handles_guide_rna(lhs_25_default: str, guide_20: str, flex_mode: str = "v1") -> Tuple[str, str]:
+    """Guide RNA mode: LHS = flex prefix + fixed 25-mer; RHS = /5Phos/TAAAC + user 20-mer + flex-specific suffix."""
+    if flex_mode == "v2":
+        lhs_with_handles = FLEX_V2_LHS_PREFIX + lhs_25_default
+        rhs_with_handles = GUIDE_RHS_PREFIX + guide_20 + FLEX_V2_RHS_SUFFIX
+    else:
+        lhs_with_handles = FLEX_V1_LHS_PREFIX + lhs_25_default
+        rhs_with_handles = GUIDE_RHS_PREFIX + guide_20 + FLEX_V1_RHS_SUFFIX
+    return lhs_with_handles, rhs_with_handles
+
+
+def process_guide_rna_20mers(
+    guide_sequences: List[str],
+    flex_mode: str = "v1",
+    default_lhs_25: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """
+    Process a list of 20-base guide RNA sequences. No lookup.
+    RHS variable region is the REVERSE COMPLEMENT of the uploaded 20 bases.
+    Returns one row per guide: same LHS; unique RHS = prefix + rev_comp(guide_20) + suffix.
+    """
+    lhs_25 = (default_lhs_25 or GUIDE_MODE_DEFAULT_LHS_25).strip().upper()
+    if len(lhs_25) != 25:
+        raise ValueError(f"Default LHS for Guide RNA mode must be 25 bases, got {len(lhs_25)}")
+    if not re.match(r"^[ATGCN]+$", lhs_25):
+        raise ValueError("Default LHS must contain only A, T, G, C, N")
+    results = []
+    for i, raw in enumerate(guide_sequences, 1):
+        guide_20 = raw.strip().upper().replace("U", "T")
+        if len(guide_20) != 20:
+            raise ValueError(f"Guide RNA must be exactly 20 bases. Row {i}: '{raw.strip()}' has {len(guide_20)} bases.")
+        if not re.match(r"^[ATGC]+$", guide_20):
+            raise ValueError(f"Guide RNA must be only A,T,G,C. Row {i}: '{raw.strip()}'")
+        rhs_20 = _reverse_complement_dna(guide_20)  # RHS variable region = reverse complement of input
+        lhs_with_handles, rhs_with_handles = apply_flex_handles_guide_rna(lhs_25, rhs_20, flex_mode)
+        results.append({
+            "lhs_probe": lhs_25,
+            "rhs_probe": rhs_20,
+            "lhs_with_handles": lhs_with_handles,
+            "rhs_with_handles": rhs_with_handles,
+            "guide_20": guide_20,
+            "gene_name": guide_20,
+        })
+    return results
 
 
 class BlastSearcher:

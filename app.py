@@ -9,7 +9,13 @@ from flask_cors import CORS
 import os
 import tempfile
 import time
-from probe_maker import ProbeMaker, GeneSequenceFetcher, apply_flex_handles
+from probe_maker import (
+    ProbeMaker,
+    GeneSequenceFetcher,
+    apply_flex_handles,
+    process_guide_rna_20mers,
+    GUIDE_MODE_DEFAULT_LHS_25,
+)
 
 app = Flask(__name__)
 
@@ -27,11 +33,41 @@ def index():
 
 @app.route('/generate', methods=['POST'])
 def generate_probes():
-    """Generate probe sequences for the submitted gene names."""
+    """Generate probe sequences: either from gene names (Probe mode) or from 20-base guide RNAs (Guide RNA mode)."""
     try:
-        # Get gene names from form
+        mode = request.form.get('mode', 'probe').strip().lower()
+        flex_mode = request.form.get('flex_mode', 'v1').strip().lower()
+        if flex_mode not in ('v1', 'v2'):
+            flex_mode = 'v1'
+
+        # --- Guide RNA mode: 20-base sequences only, no lookup ---
+        if mode == 'guide_rna':
+            guide_input = request.form.get('guide_sequences', '').strip()
+            if not guide_input:
+                return jsonify({'error': 'Please enter 20-base guide RNA sequences (one per line)'}), 400
+            lines = [line.strip() for line in guide_input.split('\n') if line.strip()]
+            if len(lines) > 500:
+                return jsonify({'error': 'Maximum 500 guide sequences per request'}), 400
+            try:
+                results = process_guide_rna_20mers(lines, flex_mode=flex_mode, default_lhs_25=GUIDE_MODE_DEFAULT_LHS_25)
+            except ValueError as e:
+                return jsonify({'error': str(e)}), 400
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as temp_file:
+                temp_file.write("LHS Probe (with handles)\tRHS Probe (with handles)\tGuide (20 bases)\n")
+                temp_file.write("-" * 60 + "\t" + "-" * 60 + "\t" + "-" * 22 + "\n")
+                for r in results:
+                    temp_file.write(f"{r['lhs_with_handles']}\t{r['rhs_with_handles']}\t{r['guide_20']}\n")
+                temp_file_path = temp_file.name
+            return jsonify({
+                'success': True,
+                'message': f'Generated {len(results)} guide RNA probe rows (same LHS, unique RHS per guide)',
+                'file_path': temp_file_path,
+                'gene_count': len(results),
+                'probe_count': len(results),
+            })
+
+        # --- Probe mode: gene names, lookup, probe design ---
         gene_input = request.form.get('gene_names', '').strip()
-        # Optional: number of probe pairs per gene (2 or 3)
         num_pairs_raw = request.form.get('num_pairs', '').strip()
         try:
             num_pairs = int(num_pairs_raw) if num_pairs_raw else 3
@@ -39,61 +75,34 @@ def generate_probes():
             num_pairs = 3
         if num_pairs not in (2, 3):
             num_pairs = 3
-        
-        # Optional: species selection (human or mouse)
         species = request.form.get('species', 'human').strip().lower()
         if species not in ('human', 'mouse'):
             species = 'human'
-        
-        # Optional: Flex mode (v1 = default handles, v2 = alternate handles)
-        flex_mode = request.form.get('flex_mode', 'v1').strip().lower()
-        if flex_mode not in ('v1', 'v2'):
-            flex_mode = 'v1'
-        
-        # Optional: Include BLAST report (default off — BLAST can be slow or timeout)
         run_blast = request.form.get('run_blast', '').strip().lower() in ('on', 'true', '1', 'yes')
-        
         if not gene_input:
             return jsonify({'error': 'Please enter gene names'}), 400
-        
-        # Parse gene names (one per line)
         gene_names = [line.strip() for line in gene_input.split('\n') if line.strip()]
-        
         if not gene_names:
             return jsonify({'error': 'No valid gene names found'}), 400
-        
-        if len(gene_names) > 100:  # Limit to prevent abuse
+        if len(gene_names) > 100:
             return jsonify({'error': 'Maximum 100 genes allowed per request'}), 400
-        
-        # Initialize ProbeMaker and GeneSequenceFetcher
         probe_maker = ProbeMaker()
         sequence_fetcher = GeneSequenceFetcher()
-        
         try:
-            # Process gene names and generate probe pairs
             results = probe_maker.process_gene_names(gene_names, sequence_fetcher, num_pairs=num_pairs, species=species)
-            
             if not results:
                 return jsonify({'error': 'No valid probe pairs could be generated'}), 400
-            
-            # Create temporary file for download
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as temp_file:
-                # Write header
                 temp_file.write("LHS Probe (25 bases)\tRHS Probe (25 bases)\tCombined Probe (50 bases)\tGene Name\n")
                 temp_file.write("-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 50 + "\t" + "-" * 20 + "\n")
-                
-                # Write probe data (apply Flex v1 or v2 handles)
                 for result in results:
                     lhs_with_handles, rhs_with_handles = apply_flex_handles(
                         result['lhs_probe'], result['rhs_probe'], flex_mode
                     )
-                    combined_probe = result['lhs_probe'] + result['rhs_probe']  # 50 bases, no adapters
+                    combined_probe = result['lhs_probe'] + result['rhs_probe']
                     gene_name = result.get('gene_name', 'Unknown')
                     temp_file.write(f"{lhs_with_handles}\t{rhs_with_handles}\t{combined_probe}\t{gene_name}\n")
-                
                 temp_file_path = temp_file.name
-            
-            # Optional: append BLAST report (only when user opts in; skipped by default to avoid timeouts)
             if run_blast and results:
                 try:
                     blast_report = probe_maker.generate_blast_report(results, species=species, timeout_seconds=30)
@@ -101,25 +110,18 @@ def generate_probes():
                         f.write("\n\n")
                         f.write(blast_report)
                 except Exception as blast_err:
-                    # Don't fail the whole request if BLAST fails; append a note
                     with open(temp_file_path, 'a', encoding='utf-8') as f:
                         f.write(f"\n\nBLAST report skipped: {blast_err}\n")
-            
-            # Return success response with file info
-            response_data = {
+            return jsonify({
                 'success': True,
                 'message': f'Successfully generated {len(results)} probe pairs for {len(gene_names)} genes',
                 'file_path': temp_file_path,
                 'gene_count': len(gene_names),
                 'probe_count': len(results),
                 'num_pairs_per_gene': num_pairs
-            }
-            
-            return jsonify(response_data)
-            
+            })
         finally:
             sequence_fetcher.close()
-            
     except Exception as e:
         return jsonify({'error': f'Error generating probes: {str(e)}'}), 500
 
